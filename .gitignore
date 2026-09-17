@@ -4,3 +4,4 @@ __pycache__/
 output/
 .idea/
 .pytest_cache/
+chrome_profile/
