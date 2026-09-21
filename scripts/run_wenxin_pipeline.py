@@ -31,6 +31,11 @@ from app.wenxin.verifier import (
     verify_package_directory,
     verify_package_zip,
 )
+from app.wenxin.exceptions import (
+    WenxinLoginRequiredError,
+    WenxinQuotaExhaustedError,
+    WenxinRiskControlError,
+)
 
 CHECKPOINT_ROOT = Path(
     "output/checkpoints"
@@ -400,6 +405,58 @@ def export_package(
     )
 
 
+def wait_for_manual_recovery(
+        *,
+        title: str,
+        task_id: str,
+        message: str,
+) -> bool:
+    print()
+    print("=" * 80)
+    print(title)
+    print("=" * 80)
+
+    print(
+        "CURRENT TASK:",
+        task_id or "unknown",
+    )
+
+    print(
+        "DETAIL:",
+        message,
+    )
+
+    print()
+    print(
+        "请在当前 Chrome 中"
+        "人工完成处理。"
+    )
+
+    print()
+    print(
+        "[R] 处理完成，重试当前任务"
+    )
+
+    print(
+        "[Q] 保存断点并退出"
+    )
+
+    while True:
+        value = input(
+            "\n请输入 [R/Q]: "
+        ).strip().lower()
+
+        if value == "r":
+            return True
+
+        if value == "q":
+            return False
+
+        print(
+            "请输入 R 或 Q。"
+        )
+
+
 # ============================================================
 # Summary
 # ============================================================
@@ -695,15 +752,125 @@ def main() -> int:
                     )
                 )
 
-                runner.run(
-                    tasks,
-                    planned_count=(
-                        len(all_tasks)
-                    ),
-                    finalize_checkpoint=(
-                        not is_partial
-                    ),
-                )
+                while True:
+                    try:
+                        runner.run(
+                            tasks,
+                            planned_count=(
+                                len(all_tasks)
+                            ),
+                            finalize_checkpoint=(
+                                not is_partial
+                            ),
+                        )
+
+                        break
+
+                    except WenxinQuotaExhaustedError as exc:
+                        checkpoint.refresh_meta(
+                            status="quota_waiting"
+                        )
+
+                        should_retry = (
+                            wait_for_manual_recovery(
+                                title=(
+                                    "文心账号额度已耗尽"
+                                ),
+                                task_id=exc.task_id,
+                                message=str(exc),
+                            )
+                        )
+
+                        if not should_retry:
+                            print()
+                            print(
+                                "已保存 Checkpoint，"
+                                "本轮退出。"
+                            )
+
+                            return 2
+
+                        print()
+                        print(
+                            "[RESUME] "
+                            "重新读取 Checkpoint，"
+                            "重试未完成任务。"
+                        )
+
+                    except WenxinLoginRequiredError as exc:
+                        checkpoint.refresh_meta(
+                            status="login_waiting"
+                        )
+
+                        should_retry = (
+                            wait_for_manual_recovery(
+                                title=(
+                                    "文心登录状态失效"
+                                ),
+                                task_id=exc.task_id,
+                                message=str(exc),
+                            )
+                        )
+
+                        if not should_retry:
+                            print()
+                            print(
+                                "已保存 Checkpoint，"
+                                "本轮退出。"
+                            )
+
+                            return 2
+
+                        print()
+                        print(
+                            "[RESUME] "
+                            "重新登录完成，"
+                            "重试未完成任务。"
+                        )
+
+                    except WenxinRiskControlError as exc:
+                        checkpoint.refresh_meta(
+                            status="risk_control"
+                        )
+
+                        print()
+                        print("=" * 80)
+                        print(
+                            "检测到文心风控 / 安全验证"
+                        )
+                        print("=" * 80)
+
+                        print(
+                            "CURRENT TASK:",
+                            exc.task_id or "unknown",
+                        )
+
+                        print(
+                            "DETAIL:",
+                            str(exc),
+                        )
+
+                        print()
+                        print(
+                            "已停止发送后续请求。"
+                        )
+
+                        print(
+                            "已完成任务仍保存在 "
+                            "Checkpoint 中。"
+                        )
+
+                        print(
+                            "当前任务未标记为 FAILED。"
+                        )
+
+                        print()
+                        print(
+                            "请稍后使用相同 batch_id "
+                            "重新运行。"
+                        )
+
+                        return 3
 
         except Exception as exc:
             print()

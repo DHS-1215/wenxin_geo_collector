@@ -24,6 +24,10 @@ from app.wenxin.types import (
     WenxinMode,
 )
 
+from app.wenxin.error_classifier import (
+    raise_for_wenxin_control,
+)
+
 
 class WenxinClient:
     """文心助手网页采集客户端。"""
@@ -394,9 +398,22 @@ class WenxinClient:
             question
         )
 
-        answer_node = self.wait_answer(
-            previous_count
-        )
+        try:
+            answer_node = self.wait_answer(
+                previous_count
+            )
+
+        except Exception as exc:
+            page_text = (
+                self._safe_page_text()
+            )
+
+            raise_for_wenxin_control(
+                str(exc),
+                page_text,
+            )
+
+            raise
 
         raw_markdown = answer_node.locator(
             MARKDOWN_CONTENT_SELECTOR
@@ -412,8 +429,8 @@ class WenxinClient:
                 .strip()
             )
 
-        text = extract_answer_text(
-            answer_node
+        raise_for_wenxin_control(
+            text
         )
 
         sources = extract_sources(
@@ -475,3 +492,17 @@ class WenxinClient:
         self.page.wait_for_timeout(
             int(delay * 1000)
         )
+
+    def _safe_page_text(
+            self,
+    ) -> str:
+        try:
+            return (
+                self.page
+                .locator("body")
+                .inner_text(
+                    timeout=3000
+                )
+            )
+        except Exception:
+            return ""

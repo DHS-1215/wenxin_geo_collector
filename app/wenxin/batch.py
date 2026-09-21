@@ -11,6 +11,9 @@ from app.wenxin.types import (
     WenxinTask,
     WenxinTaskResult,
 )
+from app.wenxin.exceptions import (
+    WenxinControlFlowError,
+)
 
 
 class WenxinBatchRunner:
@@ -164,6 +167,22 @@ class WenxinBatchRunner:
                         f"session="
                         f"{answer.session_id}"
                     )
+
+                except WenxinControlFlowError as exc:
+                    exc.bind_task(
+                        task.task_id
+                    )
+
+                    print(
+                        "[CONTROL EVENT]",
+                        type(exc).__name__,
+                        str(exc),
+                    )
+
+                    # 不写 FAILED checkpoint。
+                    # 当前题保持 pending，
+                    # 交给 Pipeline 决定怎么处理。
+                    raise
 
                 except Exception as exc:
                     result = (
