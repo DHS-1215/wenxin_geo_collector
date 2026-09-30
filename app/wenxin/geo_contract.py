@@ -8,7 +8,7 @@ GEO_BATCH_VERSION = "geo_batch_v1"
 WENXIN_PLATFORM_CODE = "wenxin"
 WENXIN_PLATFORM_NAME = "百度文心助手"
 
-COLLECTOR_VERSION = "0.1.0"
+COLLECTOR_VERSION = "1.0.0"
 
 
 def _stable_hash(

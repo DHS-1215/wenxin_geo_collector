@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import hashlib
+
 import csv
 import json
 from zipfile import ZipFile
 import pytest
 
+from app.wenxin.client import WenxinClient
 from app.wenxin.batch import WenxinBatchRunner
 from app.wenxin.exceptions import (
     WenxinLoginRequiredError,
@@ -37,6 +40,9 @@ from app.wenxin.verifier import (
 from app.wenxin.error_classifier import (
     WenxinControlKind,
     classify_wenxin_text,
+)
+from app.wenxin.screenshot import (
+    _read_png_size,
 )
 
 
@@ -72,6 +78,15 @@ def build_fake_result() -> WenxinTaskResult:
                     tags=["测试"],
                 )
             ],
+            screenshot_path=(
+                "output/screenshots/"
+                "batch_001/"
+                "wx_t_test.png"
+            ),
+            screenshot_sha256="a" * 64,
+            screenshot_size_bytes=123456,
+            screenshot_width=2560,
+            screenshot_height=1440,
         ),
     )
 
@@ -222,11 +237,76 @@ def test_checkpoint_round_trip(
             == "https://example.com/a"
     )
 
+    assert (
+            restored.answer.screenshot_path
+            == original.answer.screenshot_path
+    )
+
+    assert (
+            restored.answer.screenshot_sha256
+            == original.answer.screenshot_sha256
+    )
+
+    assert (
+            restored.answer.screenshot_size_bytes
+            == 123456
+    )
+
+    assert (
+            restored.answer.screenshot_width
+            == 2560
+    )
+
+    assert (
+            restored.answer.screenshot_height
+            == 1440
+    )
+
 
 def test_export_verify_and_zip(
         tmp_path,
 ) -> None:
     result = build_fake_result()
+
+    assert result.answer is not None
+
+    screenshot_bytes = bytes.fromhex(
+        "89504e470d0a1a0a"
+        "0000000d49484452"
+        "0000000100000001"
+        "08060000001f15c489"
+        "0000000d49444154"
+        "789c636000000002"
+        "0001e221bc33"
+        "0000000049454e44"
+        "ae426082"
+    )
+
+    screenshot_path = (
+        tmp_path
+        / "runtime_screenshot.png"
+    )
+
+    screenshot_path.write_bytes(
+        screenshot_bytes
+    )
+
+    result.answer.screenshot_path = str(
+        screenshot_path
+    )
+
+    result.answer.screenshot_sha256 = (
+        hashlib.sha256(
+            screenshot_bytes
+        ).hexdigest()
+    )
+
+    result.answer.screenshot_size_bytes = (
+        len(screenshot_bytes)
+    )
+
+    result.answer.screenshot_width = 1
+    result.answer.screenshot_height = 1
 
     package_dir = (
             tmp_path
@@ -282,15 +362,40 @@ def test_export_verify_and_zip(
     )
 
     with ZipFile(zip_path) as archive:
-        assert set(
+        names = set(
             archive.namelist()
-        ) == {
-                   "manifest.json",
-                   "tasks.jsonl",
-                   "answers.jsonl",
-                   "sources.jsonl",
-                   "checksums.json",
-               }
+        )
+
+        core_files = {
+            "manifest.json",
+            "tasks.jsonl",
+            "answers.jsonl",
+            "sources.jsonl",
+            "checksums.json",
+        }
+
+        assert core_files.issubset(
+            names
+        )
+
+        screenshot_files = {
+            name
+            for name in names
+            if (
+                name.startswith(
+                    "screenshots/"
+                )
+                and name.endswith(
+                    ".png"
+                )
+            )
+        }
+
+        assert len(
+            screenshot_files
+        ) == 1
+
+        assert len(names) == 6
 
 
 def test_classify_quota() -> None:
@@ -392,6 +497,7 @@ def test_quota_resume_from_current_task(
                 self,
                 question: str,
                 mode: WenxinMode,
+                screenshot_output_path=None,
         ) -> WenxinAnswer:
             self.calls.append(
                 question
@@ -603,6 +709,7 @@ def test_risk_control_stops_batch(
                 self,
                 question: str,
                 mode: WenxinMode,
+                screenshot_output_path=None,
         ) -> WenxinAnswer:
             self.calls.append(
                 question
@@ -773,6 +880,7 @@ def test_login_resume_from_current_task(
                 self,
                 question: str,
                 mode: WenxinMode,
+                screenshot_output_path=None,
         ) -> WenxinAnswer:
             self.calls.append(
                 question
@@ -896,3 +1004,156 @@ def test_login_resume_from_current_task(
     assert meta["completed_count"] == 3
     assert meta["success_count"] == 3
     assert meta["failed_count"] == 0
+
+
+def test_client_collect_extracts_answer_text(
+        monkeypatch,
+) -> None:
+    """
+    回归测试：
+    回答完成后必须先得到 text，
+    再进行额度 / 风控检测。
+
+    防止再次出现：
+    NameError: name 'text' is not defined
+    """
+
+    class FakeRawMarkdown:
+        @property
+        def last(self):
+            return self
+
+        def count(self) -> int:
+            return 1
+
+        def inner_text(self) -> str:
+            return "原始回答内容"
+
+    class FakeAnswerNode:
+        def locator(
+                self,
+                selector: str,
+        ):
+            return FakeRawMarkdown()
+
+    class FakePage:
+        url = (
+            "https://wenxin.baidu.com/"
+            "search/123456"
+        )
+
+        def locator(
+                self,
+                selector: str,
+        ):
+            return FakeRawMarkdown()
+
+    client = WenxinClient(
+        page=FakePage()
+    )
+
+    answer_node = FakeAnswerNode()
+
+    monkeypatch.setattr(
+        client,
+        "new_chat",
+        lambda: None,
+    )
+
+    monkeypatch.setattr(
+        client,
+        "set_mode",
+        lambda mode: None,
+    )
+
+    monkeypatch.setattr(
+        client,
+        "send",
+        lambda question: None,
+    )
+
+    monkeypatch.setattr(
+        client,
+        "wait_answer",
+        lambda previous_count: answer_node,
+    )
+
+    monkeypatch.setattr(
+        client,
+        "get_session_id",
+        lambda: "123456",
+    )
+
+    monkeypatch.setattr(
+        client,
+        "extract_answer_meta",
+        lambda node: (
+            "smartMode",
+            False,
+        ),
+    )
+
+    monkeypatch.setattr(
+        "app.wenxin.client.extract_answer_text",
+        lambda node: "这是清洗后的正文",
+    )
+
+    monkeypatch.setattr(
+        "app.wenxin.client.extract_sources",
+        lambda node: [],
+    )
+
+    result = client.collect(
+        question="测试问题",
+        mode=WenxinMode.FAST,
+    )
+
+    assert result.text == (
+        "这是清洗后的正文"
+    )
+
+    assert result.raw_text == (
+        "原始回答内容"
+    )
+
+    assert result.session_id == "123456"
+    assert result.model_name == "smartMode"
+    assert result.deep_search is False
+    assert result.sources == []
+
+
+def test_read_png_size() -> None:
+    """
+    验证不依赖 Pillow
+    也能正确读取 PNG 宽高。
+    """
+
+    import struct
+
+    width = 2561
+    height = 1314
+
+    fake_png = (
+            b"\x89PNG\r\n\x1a\n"
+            + struct.pack(
+        ">I",
+        13,
+    )
+            + b"IHDR"
+            + struct.pack(
+        ">II",
+        width,
+        height,
+    )
+            + b"\x08\x06\x00\x00\x00"
+            + b"\x00\x00\x00\x00"
+    )
+
+    actual_width, actual_height = (
+        _read_png_size(
+            fake_png
+        )
+    )
+
+    assert actual_width == 2561
+    assert actual_height == 1314

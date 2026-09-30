@@ -4,6 +4,7 @@ import json
 import random
 import re
 import time
+from pathlib import Path
 
 from datetime import datetime, timezone
 from playwright.sync_api import Locator, Page
@@ -26,6 +27,10 @@ from app.wenxin.types import (
 
 from app.wenxin.error_classifier import (
     raise_for_wenxin_control,
+)
+
+from app.wenxin.screenshot import (
+    capture_answer_screenshot,
 )
 
 
@@ -384,7 +389,8 @@ class WenxinClient:
     def collect(
             self,
             question: str,
-            mode: WenxinMode = WenxinMode.FAST,
+            mode: WenxinMode,
+            screenshot_output_path: Path | None = None,
     ) -> WenxinAnswer:
         """完成一次完整的文心单题采集。"""
 
@@ -415,6 +421,10 @@ class WenxinClient:
 
             raise
 
+        text = extract_answer_text(
+            answer_node
+        )
+
         raw_markdown = answer_node.locator(
             MARKDOWN_CONTENT_SELECTOR
         )
@@ -437,6 +447,19 @@ class WenxinClient:
             answer_node
         )
 
+        screenshot_info = None
+
+        if screenshot_output_path is not None:
+            screenshot_info = (
+                capture_answer_screenshot(
+                    page=self.page,
+                    answer_node=answer_node,
+                    output_path=(
+                        screenshot_output_path
+                    ),
+                )
+            )
+
         (
             model_name,
             deep_search,
@@ -445,6 +468,31 @@ class WenxinClient:
         )
 
         return WenxinAnswer(
+            screenshot_path=(
+                screenshot_info.path
+                if screenshot_info
+                else None
+            ),
+            screenshot_sha256=(
+                screenshot_info.sha256
+                if screenshot_info
+                else None
+            ),
+            screenshot_size_bytes=(
+                screenshot_info.size_bytes
+                if screenshot_info
+                else None
+            ),
+            screenshot_width=(
+                screenshot_info.width
+                if screenshot_info
+                else None
+            ),
+            screenshot_height=(
+                screenshot_info.height
+                if screenshot_info
+                else None
+            ),
             question=question,
             text=text,
             raw_text=raw_text,
@@ -459,6 +507,7 @@ class WenxinClient:
             model_name=model_name,
             deep_search=deep_search,
             sources=sources,
+
         )
 
     # ============================================================

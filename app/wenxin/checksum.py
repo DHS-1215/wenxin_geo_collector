@@ -5,9 +5,9 @@ from pathlib import Path
 
 
 def sha256_file(
-        path: str | Path,
+    path: str | Path,
 ) -> str:
-    """计算文件 SHA-256。"""
+    """Calculate SHA-256 for one file."""
 
     path = Path(path)
 
@@ -30,28 +30,58 @@ def sha256_file(
 
 
 def generate_checksums(
-        files: list[str | Path],
+    files: list[str | Path],
+    *,
+    base_dir: str | Path | None = None,
 ) -> dict:
     """
-    生成 GEO 标准 checksums.json 数据。
+    Build checksums.json data.
 
-    checksums.json 本身不参与校验。
+    If base_dir is supplied, checksum keys are
+    package-relative POSIX paths such as:
+    screenshots/wx_t_xxx.png
     """
 
     result: dict[str, str] = {}
+
+    base = (
+        Path(base_dir).resolve()
+        if base_dir is not None
+        else None
+    )
 
     for file_path in files:
         path = Path(
             file_path
         )
 
-        if not path.exists():
+        if not path.is_file():
             raise FileNotFoundError(
-                f"校验文件不存在: {path}"
+                f"Checksum file not found: {path}"
             )
 
-        result[path.name] = (
-            sha256_file(path)
+        if base is None:
+            key = path.name
+        else:
+            try:
+                key = (
+                    path.resolve()
+                    .relative_to(base)
+                    .as_posix()
+                )
+            except ValueError as exc:
+                raise ValueError(
+                    "Checksum file is outside package: "
+                    f"{path}"
+                ) from exc
+
+        if key in result:
+            raise ValueError(
+                f"Duplicate checksum path: {key}"
+            )
+
+        result[key] = sha256_file(
+            path
         )
 
     return {

@@ -47,23 +47,23 @@ class WenxinSource:
 
 @dataclass(slots=True)
 class WenxinAnswer:
-    """文心单次回答结果。"""
-
     question: str
     text: str
     session_id: str
     mode: WenxinMode
-
     raw_text: str = ""
     conversation_url: str = ""
     collected_at: str = ""
-
     model_name: str | None = None
     deep_search: bool | None = None
-
     sources: list[WenxinSource] = field(
         default_factory=list
     )
+    screenshot_path: str | None = None
+    screenshot_sha256: str | None = None
+    screenshot_size_bytes: int | None = None
+    screenshot_width: int | None = None
+    screenshot_height: int | None = None
 
 
 @dataclass(slots=True)
@@ -93,3 +93,9 @@ class WenxinTaskResult:
 
     answer: WenxinAnswer | None = None
     error: str | None = None
+
+    screenshot_path: str | None = None
+    screenshot_sha256: str | None = None
+    screenshot_size_bytes: int | None = None
+    screenshot_width: int | None = None
+    screenshot_height: int | None = None

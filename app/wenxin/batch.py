@@ -14,6 +14,13 @@ from app.wenxin.types import (
 from app.wenxin.exceptions import (
     WenxinControlFlowError,
 )
+from app.wenxin.geo_contract import (
+    build_task_id,
+)
+
+from app.wenxin.screenshot import (
+    build_runtime_screenshot_path,
+)
 
 
 class WenxinBatchRunner:
@@ -125,12 +132,35 @@ class WenxinBatchRunner:
                 # ================================================
 
                 try:
+                    screenshot_output_path = None
+
+                    if self.checkpoint is not None:
+                        batch_id = (
+                            self.checkpoint.batch_id
+                        )
+
+                        geo_task_id = build_task_id(
+                            batch_id,
+                            task.question_id,
+                            task.geo_mode.value,
+                        )
+
+                        screenshot_output_path = (
+                            build_runtime_screenshot_path(
+                                batch_id=batch_id,
+                                task_id=geo_task_id,
+                            )
+                        )
+
                     answer = (
                         self.client.collect(
                             question=(
                                 task.question
                             ),
                             mode=task.mode,
+                            screenshot_output_path=(
+                                screenshot_output_path
+                            ),
                         )
                     )
 

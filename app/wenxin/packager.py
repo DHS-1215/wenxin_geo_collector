@@ -7,19 +7,19 @@ from zipfile import (
 )
 
 from app.wenxin.verifier import (
-    PACKAGE_FILES,
     verify_package_directory,
     verify_package_zip,
 )
 
 
 def create_package(
-        package_dir: str | Path,
-        output_zip: str | Path,
+    package_dir: str | Path,
+    output_zip: str | Path,
 ) -> Path:
     """
-    将已经导出的 GEO 标准目录
-    打包为 ZIP，并在打包前后各验证一次。
+    Package a verified GEO directory into ZIP.
+    All package files, including screenshots/,
+    are stored with package-relative paths.
     """
 
     package_dir = Path(
@@ -42,22 +42,38 @@ def create_package(
     if output_zip.exists():
         output_zip.unlink()
 
+    package_files = sorted(
+        (
+            path
+            for path in package_dir.rglob(
+                "*"
+            )
+            if path.is_file()
+        ),
+        key=lambda path: (
+            path.relative_to(
+                package_dir
+            ).as_posix()
+        ),
+    )
+
     with ZipFile(
-            output_zip,
-            mode="w",
-            compression=ZIP_DEFLATED,
+        output_zip,
+        mode="w",
+        compression=ZIP_DEFLATED,
     ) as archive:
-        for file_name in sorted(
-                PACKAGE_FILES
-        ):
-            file_path = (
+        for file_path in package_files:
+            arcname = (
+                file_path
+                .relative_to(
                     package_dir
-                    / file_name
+                )
+                .as_posix()
             )
 
             archive.write(
                 file_path,
-                arcname=file_name,
+                arcname=arcname,
             )
 
     verify_package_zip(

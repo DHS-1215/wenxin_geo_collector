@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import shutil
+
 from enum import Enum
 from pathlib import Path
 
@@ -88,6 +90,16 @@ class WenxinExporter:
         )
 
         output.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        screenshots_dir = (
+            output
+            / "screenshots"
+        )
+
+        screenshots_dir.mkdir(
             parents=True,
             exist_ok=True,
         )
@@ -183,6 +195,42 @@ class WenxinExporter:
                 if source.url.strip()
             ]
 
+            screenshot_rel_path = None
+
+            if answer.screenshot_path:
+                screenshot_source = Path(
+                    answer.screenshot_path
+                )
+
+                if not screenshot_source.is_file():
+                    raise FileNotFoundError(
+                        "???????: "
+                        f"{screenshot_source}"
+                    )
+
+                screenshot_rel_path = (
+                    f"screenshots/{task_id}.png"
+                )
+
+                screenshot_target = (
+                    output
+                    / screenshot_rel_path
+                )
+
+                screenshot_target.parent.mkdir(
+                    parents=True,
+                    exist_ok=True,
+                )
+
+                if (
+                    screenshot_source.resolve()
+                    != screenshot_target.resolve()
+                ):
+                    shutil.copy2(
+                        screenshot_source,
+                        screenshot_target,
+                    )
+
             platform_meta = {
                 "collector_task_id": (
                     result.task_id
@@ -201,6 +249,18 @@ class WenxinExporter:
                 ),
                 "conversation_url": (
                     answer.conversation_url
+                ),
+                "screenshot_sha256": (
+                    answer.screenshot_sha256
+                ),
+                "screenshot_size_bytes": (
+                    answer.screenshot_size_bytes
+                ),
+                "screenshot_width": (
+                    answer.screenshot_width
+                ),
+                "screenshot_height": (
+                    answer.screenshot_height
                 ),
             }
 
@@ -247,7 +307,7 @@ class WenxinExporter:
                         )
                     ),
                     "screenshot_path": (
-                        None
+                        screenshot_rel_path
                     ),
                     "platform_meta_json": (
                         platform_meta
@@ -416,7 +476,7 @@ class WenxinExporter:
                     False
                 ),
 
-                "supports_screenshot": False,
+                "supports_screenshot": True,
             },
             "status": (
                 "PASS"
@@ -469,9 +529,18 @@ class WenxinExporter:
             output / "sources.jsonl",
         ]
 
+        checksum_files.extend(
+            sorted(
+                screenshots_dir.glob(
+                    "*.png"
+                )
+            )
+        )
+
         checksums = (
             generate_checksums(
-                checksum_files
+                checksum_files,
+                base_dir=output,
             )
         )
 

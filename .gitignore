@@ -5,3 +5,6 @@ output/
 .idea/
 .pytest_cache/
 chrome_profile/
+runtime/
+logs/
+dist/

@@ -281,11 +281,13 @@ python -m scripts.run_wenxin_pipeline `
 
 ```text
 output/package/<batch_id>/
-├── manifest.json
-├── tasks.jsonl
-├── answers.jsonl
-├── sources.jsonl
-└── checksums.json
+|-- manifest.json
+|-- tasks.jsonl
+|-- answers.jsonl
+|-- sources.jsonl
+|-- checksums.json
+`-- screenshots/
+    `-- wx_t_<task_hash>.png
 ```
 
 同时生成：
@@ -302,6 +304,8 @@ tasks.jsonl
 answers.jsonl
 sources.jsonl
 checksums.json
+screenshots/
+    wx_t_<task_hash>.png
 ```
 
 不包含额外父目录或临时文件。
@@ -337,6 +341,7 @@ manifest.json
 tasks.jsonl
 answers.jsonl
 sources.jsonl
+screenshots/*.png
 ```
 
 并写入：
@@ -486,7 +491,7 @@ Capacity Probe 仅用于观察当前环境下的稳定性，不用于探测或�
 ## 17. 当前版本
 
 ```text
-Collector Version: 0.1.0
+Collector Version: 1.0.0
 Schema Version: geo_package_v1
 GEO Batch Version: geo_batch_v1
 Platform Code: wenxin
@@ -512,3 +517,17 @@ CSV
 ```
 
 项目已进入 v1.0 收尾阶段。
+
+
+## 19. v1.0 Screenshot Evidence Chain
+
+Collector v1.0 supports screenshot evidence for successful Wenxin answers.
+
+- Runtime screenshots: `output/screenshots/<batch_id>/wx_t_<task_hash>.png`
+- Package screenshots: `screenshots/wx_t_<task_hash>.png`
+- `answers.jsonl` records screenshot path, SHA-256, size, width and height.
+- `checksums.json` includes screenshot SHA-256.
+- Directory Verifier validates screenshot references and metadata.
+- ZIP Verifier validates screenshots inside the final GEO package.
+
+Evidence chain: Wenxin -> Screenshot -> Checkpoint -> Exporter -> Checksum -> Verify -> ZIP.

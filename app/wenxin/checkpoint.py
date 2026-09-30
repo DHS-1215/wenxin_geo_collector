@@ -303,6 +303,23 @@ class WenxinCheckpoint:
                 "deep_search": (
                     answer.deep_search
                 ),
+
+                "screenshot_path": (
+                    answer.screenshot_path
+                ),
+                "screenshot_sha256": (
+                    answer.screenshot_sha256
+                ),
+                "screenshot_size_bytes": (
+                    answer.screenshot_size_bytes
+                ),
+                "screenshot_width": (
+                    answer.screenshot_width
+                ),
+                "screenshot_height": (
+                    answer.screenshot_height
+                ),
+
                 "sources": [
                     {
                         "rank": source.rank,
@@ -439,6 +456,33 @@ class WenxinCheckpoint:
                         "deep_search"
                     )
                 ),
+
+                screenshot_path=(
+                    answer_data.get(
+                        "screenshot_path"
+                    )
+                ),
+                screenshot_sha256=(
+                    answer_data.get(
+                        "screenshot_sha256"
+                    )
+                ),
+                screenshot_size_bytes=(
+                    answer_data.get(
+                        "screenshot_size_bytes"
+                    )
+                ),
+                screenshot_width=(
+                    answer_data.get(
+                        "screenshot_width"
+                    )
+                ),
+                screenshot_height=(
+                    answer_data.get(
+                        "screenshot_height"
+                    )
+                ),
+
                 sources=sources,
             )
 
