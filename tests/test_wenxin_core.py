@@ -1157,3 +1157,150 @@ def test_read_png_size() -> None:
 
     assert actual_width == 2561
     assert actual_height == 1314
+
+
+def test_multi_markdown_trailing_empty_regression() -> None:
+    """
+    回归测试：
+    文心回答可能包含多个 markdown，
+    真正文在前，最后一个 markdown 为空。
+
+    必须满足：
+    1. wait_answer 不应假超时
+    2. extract_answer_text 应提取真正文
+    3. extract_answer_meta 应从真正文节点读取元数据
+    """
+    import json
+
+    from app.wenxin.answer import extract_answer_text
+    from app.wenxin.client import WenxinClient
+    from app.wenxin.selectors import (
+        ANSWER_SELECTOR,
+        MARKDOWN_CONTENT_SELECTOR,
+        MARKDOWN_SELECTOR,
+    )
+
+    class FakeNode:
+        def __init__(
+                self,
+                text="",
+                attrs=None,
+        ):
+            self.text = text
+            self.attrs = attrs or {}
+
+        def inner_text(self):
+            return self.text
+
+        def get_attribute(self, name):
+            return self.attrs.get(name)
+
+        def evaluate(self, script, arg=None):
+            return self.text
+
+    class FakeCollection:
+        def __init__(self, nodes):
+            self.nodes = nodes
+
+        def count(self):
+            return len(self.nodes)
+
+        def nth(self, index):
+            return self.nodes[index]
+
+        @property
+        def last(self):
+            return self.nodes[-1]
+
+    meta = json.dumps(
+        {
+            "usedModel": {
+                "modelName": "smartMode",
+                "modelFunction": {
+                    "deepSearch": False,
+                },
+            },
+        }
+    )
+
+    real_markdown = FakeNode(
+        text="真正的回答正文",
+        attrs={
+            "data-show-log": meta,
+        },
+    )
+
+    empty_markdown = FakeNode(
+        text="",
+        attrs={
+            "data-show-log": "{}",
+        },
+    )
+
+    real_content = FakeNode(
+        text="真正的回答正文",
+    )
+
+    empty_content = FakeNode(
+        text="",
+    )
+
+    class FakeAnswer:
+        def get_attribute(self, name):
+            if name == "data-status":
+                return "COMPLETE"
+
+            return None
+
+        def locator(self, selector):
+            if selector == MARKDOWN_SELECTOR:
+                return FakeCollection(
+                    [
+                        real_markdown,
+                        empty_markdown,
+                    ]
+                )
+
+            if selector == MARKDOWN_CONTENT_SELECTOR:
+                return FakeCollection(
+                    [
+                        real_content,
+                        empty_content,
+                    ]
+                )
+
+            return FakeCollection([])
+
+    answer = FakeAnswer()
+
+    class FakePage:
+        def locator(self, selector):
+            if selector == ANSWER_SELECTOR:
+                return FakeCollection([answer])
+
+            return FakeCollection([])
+
+        def wait_for_timeout(self, milliseconds):
+            pass
+
+    client = WenxinClient(
+        page=FakePage(),
+        answer_timeout=0.01,
+    )
+
+    completed_answer = client.wait_answer(
+        previous_answer_count=0,
+    )
+
+    assert completed_answer is answer
+
+    assert extract_answer_text(
+        answer
+    ) == "真正的回答正文"
+
+    assert WenxinClient.extract_answer_meta(
+        answer
+    ) == (
+        "smartMode",
+        False,
+    )

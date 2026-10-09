@@ -283,11 +283,13 @@ class WenxinClient:
                         MARKDOWN_SELECTOR
                     )
 
-                    if (
+                    for i in range(
                             markdown.count()
-                            and markdown.last.inner_text().strip()
                     ):
-                        return answer
+                        candidate = markdown.nth(i)
+
+                        if candidate.inner_text().strip():
+                            return answer
 
             if elapsed >= self.answer_timeout:
                 raise TimeoutError(
@@ -332,7 +334,26 @@ class WenxinClient:
         if markdown.count() == 0:
             return None, None
 
-        raw = markdown.last.get_attribute(
+        best_markdown = None
+        best_length = 0
+
+        for i in range(
+                markdown.count()
+        ):
+            candidate = markdown.nth(i)
+
+            candidate_text = (
+                candidate.inner_text().strip()
+            )
+
+            if len(candidate_text) > best_length:
+                best_markdown = candidate
+                best_length = len(candidate_text)
+
+        if best_markdown is None:
+            return None, None
+
+        raw = best_markdown.get_attribute(
             "data-show-log"
         )
 

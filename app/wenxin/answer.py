@@ -47,7 +47,24 @@ def extract_answer_text(answer: Locator) -> str:
     if markdown.count() == 0:
         return ""
 
-    markdown = markdown.last
+    best_markdown = None
+    best_length = 0
+
+    for i in range(markdown.count()):
+        candidate = markdown.nth(i)
+
+        candidate_text = (
+            candidate.inner_text().strip()
+        )
+
+        if len(candidate_text) > best_length:
+            best_markdown = candidate
+            best_length = len(candidate_text)
+
+    if best_markdown is None:
+        return ""
+
+    markdown = best_markdown
 
     text = markdown.evaluate(
         """
